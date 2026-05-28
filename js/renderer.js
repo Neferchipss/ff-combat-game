@@ -34,6 +34,28 @@ const RenderSystem = (() => {
     ctx.globalAlpha = 1;
   }
 
+  function drawVision(e) {
+    const { ctx } = World;
+    if (e.state !== 'idle') return;
+
+    ctx.save();
+    ctx.beginPath();
+    ctx.moveTo(e.x, e.y);
+    ctx.arc(e.x, e.y, e.visionRange, e.facing - e.visionHalfAngle, e.facing + e.visionHalfAngle);
+    ctx.closePath();
+
+    const grad = ctx.createRadialGradient(e.x, e.y, e.r, e.x, e.y, e.visionRange);
+    grad.addColorStop(0, 'rgba(255, 255, 255, 0.1)');
+    grad.addColorStop(1, 'rgba(255, 255, 255, 0)');
+    ctx.fillStyle = grad;
+    ctx.fill();
+
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    ctx.restore();
+  }
+
   function drawEnemy(e) {
     const { ctx } = World;
 
@@ -46,10 +68,12 @@ const RenderSystem = (() => {
     }
 
     drawShadow(e.x, e.y, e.r);
+    drawVision(e);
 
     const fl = e.hitFlash > 0;
     let col = '#1e4a88';
     if (fl)                         col = '#ffffff';
+    else if (e.state === 'idle')     col = '#25314c';
     else if (e.state === 'windup')   col = '#7a5500';
     else if (e.state === 'attacking') col = '#7a2200';
     else if (e.state === 'stunned')   col = '#1a3a1a';
@@ -113,6 +137,7 @@ const RenderSystem = (() => {
     if (p.state === 'attacking')  col = '#ffaa00';
     if (p.state === 'countering') col = '#00d4ff';
     if (p.state === 'finishing')  col = '#ffd700';
+    if (p.state === 'evading')    col = '#66ffcc';
     if (p.iframes > 0 && Math.floor(p.iframes * 20) % 2 === 0) col = '#ffffff';
 
     ctx.fillStyle = col;

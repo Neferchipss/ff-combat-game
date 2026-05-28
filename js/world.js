@@ -12,7 +12,7 @@ const World = {
   // Read by:    MovementSystem, CombatSystem
   // aimX/aimY: right-stick direction (gamepad) or movement direction (keyboard).
   // Used by CombatSystem to pick the enemy closest to the aimed direction.
-  input: { mx: 0, my: 0, attackDown: false, counterDown: false, counterHeld: false, finisherDown: false, aimX: 0, aimY: 0 },
+  input: { mx: 0, my: 0, attackDown: false, counterDown: false, counterHeld: false, finisherDown: false, dashDown: false, aimX: 0, aimY: 0 },
 
   // Written by: EntitySystem (init/spawn), MovementSystem + CombatSystem (per frame)
   // Read by:    CombatSystem, AISystem, RenderSystem, HUDSystem

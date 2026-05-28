@@ -46,7 +46,7 @@ const HUDSystem = (() => {
         ctx.globalAlpha = pulse;
         ctx.font = 'bold 14px monospace'; ctx.textAlign = 'left';
         ctx.fillStyle = '#ffd700';
-        ctx.fillText('[ E / Ⓑ ]  FINISH', 24, H - 68);
+        ctx.fillText('[ E / RB ]  FINISH', 24, H - 68);
         ctx.globalAlpha = 1;
       }
     }
@@ -63,7 +63,7 @@ const HUDSystem = (() => {
 
     // ── Controls hint ──
     ctx.fillStyle = '#333'; ctx.font = '11px monospace'; ctx.textAlign = 'center';
-    ctx.fillText('WASD Move  |  J/Space/Ⓧ Attack  |  K/Ⓨ Counter  |  E/Ⓑ Finish (×8)', W / 2, H - 10);
+    ctx.fillText('WASD Move | J/Space/X Attack | K/Y Counter | L/Shift/B Dash | E/RB Finish (x8)', W / 2, H - 10);
 
     // ── Debug menu ──
     if (World.debug.open) {

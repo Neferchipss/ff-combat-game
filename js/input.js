@@ -7,14 +7,14 @@
 //             falls back to player.facing.
 //
 // ── Writes: World.input (mx, my, attackDown, counterDown, counterHeld,
-//                         finisherDown, aimX, aimY)
+//                         finisherDown, dashDown, aimX, aimY)
 // ── Reads:  keyboard events, Gamepad API
 // ── Emits:  nothing
 // ── Listens: nothing
 const InputSystem = (() => {
   const _keys = Object.create(null);
-  const _cur  = { attack: false, counter: false, finisher: false };
-  const _prev = { attack: false, counter: false, finisher: false };
+  const _cur  = { attack: false, counter: false, finisher: false, dash: false };
+  const _prev = { attack: false, counter: false, finisher: false, dash: false };
 
   function init() {
     window.addEventListener('keydown', e => {
@@ -38,6 +38,7 @@ const InputSystem = (() => {
     _prev.attack   = _cur.attack;
     _prev.counter  = _cur.counter;
     _prev.finisher = _cur.finisher;
+    _prev.dash     = _cur.dash;
 
     const gp = navigator.getGamepads?.()[0] ?? null;
 
@@ -67,11 +68,13 @@ const InputSystem = (() => {
 
       _cur.attack   = !!gp.buttons[2]?.pressed;  // X
       _cur.counter  = !!gp.buttons[3]?.pressed;  // Y
-      _cur.finisher = !!gp.buttons[1]?.pressed;  // B  (A = buttons[0], nothing for now)
+      _cur.finisher = !!gp.buttons[5]?.pressed;  // RB
+      _cur.dash     = !!gp.buttons[1]?.pressed;  // B
     } else {
       _cur.attack   = !!(_keys['KeyJ'] || _keys['Space']);
       _cur.counter  = !!_keys['KeyK'];
       _cur.finisher = !!_keys['KeyE'];
+      _cur.dash     = !!(_keys['ShiftLeft'] || _keys['ShiftRight'] || _keys['KeyL']);
     }
 
     // Normalise movement
@@ -86,6 +89,7 @@ const InputSystem = (() => {
     World.input.counterDown  = _cur.counter  && !_prev.counter;
     World.input.counterHeld  = _cur.counter;
     World.input.finisherDown = _cur.finisher && !_prev.finisher;
+    World.input.dashDown     = _cur.dash     && !_prev.dash;
   }
 
   return { init, update };

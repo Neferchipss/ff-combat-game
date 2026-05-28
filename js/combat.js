@@ -20,7 +20,7 @@
 // ── Emits:  'hit', 'counter', 'player:hurt', 'player:dead', 'enemy:dead', 'combo:break', 'combo:end'
 // ── Listens: 'enemy:attack:connect'
 const CombatSystem = (() => {
-  const { clamp, dist, easeOut, comboColor } = Utils;
+  const { clamp, dist, easeOut, lerp, comboColor } = Utils;
 
   // ── Targeting ─────────────────────────────────────────────────────────────
 
@@ -98,17 +98,22 @@ const CombatSystem = (() => {
   // Sets up a dash toward target. If target is within p.attackRange, snap to them
   // (p.target = target, hit will land). If beyond range, short lunge in target's
   // direction (p.target = null, hit will not land).
-  function setupDash(p, target) {
+  function setupDash(p, target, distanceTimed = false) {
     const dx = target.x - p.x, dy = target.y - p.y;
     const d  = Math.hypot(dx, dy) || 1;
     p.fromX  = p.x; p.fromY = p.y;
     p.facing = Math.atan2(dy, dx);
+    p.actionDur = p.attackDur;
 
     if (d <= p.attackRange) {
       // In range — snap to enemy
       p.toX    = target.x - (dx / d) * (p.r + target.r + 5);
       p.toY    = target.y - (dy / d) * (p.r + target.r + 5);
       p.target = target;
+      if (distanceTimed) {
+        const reach = clamp(d / p.attackRange, 0, 1);
+        p.actionDur = lerp(p.snapMinDur, p.snapMaxDur, reach);
+      }
     } else {
       // Out of range — lunge forward, no hit
       const { ARENA } = World;
@@ -116,6 +121,24 @@ const CombatSystem = (() => {
       p.toY    = clamp(p.fromY + (dy / d) * p.missLunge, ARENA.y + p.r, ARENA.y + ARENA.h - p.r);
       p.target = null;
     }
+  }
+
+  function setupEvasiveDash(p, inp) {
+    const moveLen = Math.hypot(inp.mx, inp.my);
+    let dx = moveLen > 0.15 ? inp.mx / moveLen : -Math.cos(p.facing);
+    let dy = moveLen > 0.15 ? inp.my / moveLen : -Math.sin(p.facing);
+    const { ARENA } = World;
+
+    p.fromX = p.x; p.fromY = p.y;
+    p.toX = clamp(p.x + dx * p.dashDistance, ARENA.x + p.r, ARENA.x + ARENA.w - p.r);
+    p.toY = clamp(p.y + dy * p.dashDistance, ARENA.y + p.r, ARENA.y + ARENA.h - p.r);
+    p.facing = Math.atan2(dy, dx);
+    p.target = null;
+    p.actionDur = p.dashDur;
+    p.state = 'evading';
+    p.stateTimer = p.dashDur;
+    p.iframes = Math.max(p.iframes, p.dashDur);
+    p.dashCooldownTimer = p.dashCooldown;
   }
 
   function pushPop(x, y, text, color, size = 18) {
@@ -194,6 +217,7 @@ const CombatSystem = (() => {
     const inp = World.input;
 
     if (p.iframes > 0) p.iframes -= dt;
+    if (p.dashCooldownTimer > 0) p.dashCooldownTimer -= dt;
     if (World.hurtFlashTimer > 0) World.hurtFlashTimer -= dt;
 
     // ── Idle: combo decay + input ──
@@ -206,8 +230,11 @@ const CombatSystem = (() => {
         }
       }
 
+      if (inp.dashDown && p.dashCooldownTimer <= 0) {
+        setupEvasiveDash(p, inp);
+
       // Finisher — aim-line target required; no fire on whiff (spending combo on air is bad UX)
-      if (inp.finisherDown && p.combo >= p.finisherThreshold) {
+      } else if (inp.finisherDown && p.combo >= p.finisherThreshold) {
         const t = targetOnAimLine();
         if (t) {
           setupDash(p, t);
@@ -221,7 +248,7 @@ const CombatSystem = (() => {
         const t = p.combo >= 3 ? targetOnAimLine() : nearestInMeleeRange();
         if (t) {
           if (p.combo >= 3) {
-            setupDash(p, t);
+            setupDash(p, t, true);
           } else {
             // Stationary strike — face the enemy, stay put, hit still resolves
             const dx = t.x - p.x, dy = t.y - p.y;
@@ -229,10 +256,11 @@ const CombatSystem = (() => {
             p.toX   = p.x; p.toY   = p.y;
             p.facing = Math.atan2(dy, dx);
             p.target = t;
+            p.actionDur = p.attackDur;
           }
           if (t.state === 'windup') { t.state = 'stunned';  t.stateTimer = 0.5; }
           else                      { t.state = 'cooldown'; t.stateTimer = 0.08; }
-          p.state = 'attacking'; p.stateTimer = p.attackDur;
+          p.state = 'attacking'; p.stateTimer = p.actionDur;
         }
 
       // Counter — fires when any windup enemy is within attackRange, direction-independent
@@ -247,10 +275,11 @@ const CombatSystem = (() => {
     }
 
     // ── Dash + finisher animations ──
-    if (p.state === 'attacking' || p.state === 'countering' || p.state === 'finishing') {
+    if (p.state === 'attacking' || p.state === 'countering' || p.state === 'finishing' || p.state === 'evading') {
       p.stateTimer -= dt;
-      const dur = p.state === 'attacking'  ? p.attackDur
+      const dur = p.state === 'attacking'  ? p.actionDur
                 : p.state === 'countering' ? p.counterDur
+                : p.state === 'evading'    ? p.dashDur
                 :                            p.finisherDur;
       const t = easeOut(clamp(1 - p.stateTimer / dur, 0, 1));
       p.x = p.fromX + (p.toX - p.fromX) * t;
@@ -260,8 +289,9 @@ const CombatSystem = (() => {
         const e           = p.target; // null means the lunge was out-of-range (miss)
         const wasCounter  = p.state === 'countering';
         const wasFinisher = p.state === 'finishing';
+        const wasEvading  = p.state === 'evading';
 
-        if (e !== null) {
+        if (e !== null && !wasEvading) {
           // Hit landed
           if (wasFinisher) {
             resolveFinisher(e);

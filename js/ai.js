@@ -2,6 +2,7 @@
 // Drives all enemy state machines. Player damage is routed via GameEvents.
 //
 // State machine:
+//   idle      — waits until player enters vision cone or local hive alert reaches it
 //   approach  — rush toward player until orbit range
 //   orbit     — strafe around player at melee distance, waiting for attack slot
 //   windup    — telegraph (! marker), commit to attack
@@ -22,11 +23,55 @@ const AISystem = (() => {
 
   let _prevPlayerState = null;
 
+  function angleDelta(a, b) {
+    let d = a - b;
+    while (d > Math.PI) d -= Math.PI * 2;
+    while (d < -Math.PI) d += Math.PI * 2;
+    return d;
+  }
+
+  function canSeePlayer(e, p) {
+    const dx = p.x - e.x, dy = p.y - e.y;
+    const d = Math.hypot(dx, dy);
+    if (d > e.visionRange) return false;
+    return Math.abs(angleDelta(Math.atan2(dy, dx), e.facing)) <= e.visionHalfAngle;
+  }
+
+  function alertLocalHive(spotters) {
+    const queue = [...spotters];
+    const alerted = new Set(spotters);
+
+    while (queue.length) {
+      const source = queue.shift();
+      for (const other of World.enemies) {
+        if (other.state === 'dead' || alerted.has(other)) continue;
+        if (dist(source, other) <= source.alertRadius) {
+          alerted.add(other);
+          queue.push(other);
+        }
+      }
+    }
+
+    for (const e of alerted) {
+      if (e.state === 'idle') {
+        e.state = 'approach';
+        e.decideTimer = rand(0.7, 1.4);
+      }
+    }
+  }
+
+  function updateHiveAlerts(p) {
+    const spotters = World.enemies.filter(e => e.state !== 'dead' && canSeePlayer(e, p));
+    if (spotters.length > 0) alertLocalHive(spotters);
+  }
+
   function update(dt) {
     if (World.debug.stationaryEnemies) return;
     const p         = World.player;
     const { ARENA } = World;
     const anyAggro  = World.enemies.some(e => e.state === 'windup' || e.state === 'attacking');
+
+    updateHiveAlerts(p);
 
     // Pressure escalation: survivors attack more aggressively as numbers drop
     const livingCount = World.enemies.filter(e => e.state !== 'dead').length;
@@ -48,9 +93,13 @@ const AISystem = (() => {
 
       const dx = p.x - e.x, dy = p.y - e.y;
       const d  = Math.hypot(dx, dy) || 1;
-      e.facing = Math.atan2(dy, dx);
+      if (e.state !== 'idle') e.facing = Math.atan2(dy, dx);
 
       switch (e.state) {
+
+        case 'idle': {
+          break;
+        }
 
         // ── APPROACH: rush straight to orbit range ───────────────────────────
         case 'approach': {
@@ -120,9 +169,6 @@ const AISystem = (() => {
             if (absAD < minAngSep && absAD > 0.001) {
               const nudge = (minAngSep - absAD) * 0.04 * dt * 60;
               e.orbitAngle += (angleDiff > 0 ? 1 : -1) * nudge;
-              const OR2 = orbitRange(p, e);
-              e.x = clamp(p.x + Math.cos(e.orbitAngle) * OR2, ARENA.x+e.r, ARENA.x+ARENA.w-e.r);
-              e.y = clamp(p.y + Math.sin(e.orbitAngle) * OR2, ARENA.y+e.r, ARENA.y+ARENA.h-e.r);
             }
           }
 
@@ -154,8 +200,8 @@ const AISystem = (() => {
           if (e.stateTimer <= 0) {
             e.state = 'attacking';
             e.stateTimer = 0.14;
-            e.vx = (dx/d) * 340;
-            e.vy = (dy/d) * 340;
+            e.vx = (dx/d) * 420;
+            e.vy = (dy/d) * 420;
           }
           break;
         }

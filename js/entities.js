@@ -12,8 +12,13 @@ const EntitySystem = (() => {
     hp:                5,
     speed:           230,
     attackDur:      0.17,
+    snapMinDur:     0.18,
+    snapMaxDur:     0.34,
     counterDur:     0.20,
     finisherDur:    0.45,
+    dashDur:        0.18,
+    dashDistance:    110,
+    dashCooldown:   0.65,
     chainWindow:     1.8,
     finisherThreshold: 8,
     // Attack range: max center-to-center distance for a snap-to-enemy dash.
@@ -29,6 +34,9 @@ const EntitySystem = (() => {
     speed:          75,
     windupDur:    0.65,
     cooldownDur:   1.1,
+    visionRange:   260,
+    visionHalfAngle: Math.PI / 3,
+    alertRadius:   260,
     orbitSpeedMin: 0.45,   // rad/s — how fast they strafe around the player
     orbitSpeedMax: 0.85,
     feintChance:      0.18,  // per-second probability of cancelling a windup mid-telegraph
@@ -44,16 +52,23 @@ const EntitySystem = (() => {
       hp: c.hp, maxHp: c.hp,
       speed:             c.speed,
       attackDur:         c.attackDur,
+      snapMinDur:        c.snapMinDur,
+      snapMaxDur:        c.snapMaxDur,
       counterDur:        c.counterDur,
       finisherDur:       c.finisherDur,
+      dashDur:           c.dashDur,
+      dashDistance:      c.dashDistance,
+      dashCooldown:      c.dashCooldown,
       chainWindow:       c.chainWindow,
       finisherThreshold: c.finisherThreshold,
       attackRange:       c.attackRange,
       missLunge:         c.missLunge,
       meleeRange:        c.meleeRange,
       // state
-      state: 'idle',   // idle | attacking | countering | finishing | hurt | dead
+      state: 'idle',   // idle | attacking | countering | finishing | evading | hurt | dead
       stateTimer: 0,
+      actionDur: c.attackDur,
+      dashCooldownTimer: 0,
       fromX: x, fromY: y,
       toX: x,   toY: y,
       target: null,
@@ -71,6 +86,9 @@ const EntitySystem = (() => {
       speed:       c.speed       + Utils.rand(-25, 25),
       windupDur:   c.windupDur   + Utils.rand(-0.22, 0.22),
       cooldownDur: c.cooldownDur + Utils.rand(-0.4,  0.4),
+      visionRange: c.visionRange,
+      visionHalfAngle: c.visionHalfAngle,
+      alertRadius: c.alertRadius,
       // orbit properties
       orbitAngle: Utils.rand(0, Math.PI * 2),
       orbitDir:   Math.random() > 0.5 ? 1 : -1,
@@ -79,12 +97,12 @@ const EntitySystem = (() => {
       orbitFlipChance:  c.orbitFlipChance,
       orbitFlipCooldown: 0,  // runtime counter; starts ready to flip
       // state
-      state: 'approach',  // approach | orbit | windup | attacking | cooldown | stunned | knockback | dead
+      state: 'idle',  // idle | approach | orbit | windup | attacking | cooldown | stunned | knockback | dead
       stateTimer: 0,
       decideTimer: Utils.rand(1.0, 2.5),
       vx: 0, vy: 0,
       hitFlash: 0,
-      facing: 0,
+      facing: Utils.rand(0, Math.PI * 2),
     };
   }
 
